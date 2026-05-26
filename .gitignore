@@ -1,0 +1,29 @@
+# Secrets — NEVER push these
+.env
+.env.local
+.env.production
+
+# Virtual environment — too large, unnecessary
+venv/
+env/
+
+# Python cache files — auto-generated, not needed
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code settings — personal preference, not project
+.vscode/
+
+# Model files — too large for GitHub
+*.bin
+*.pt
+*.pth
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

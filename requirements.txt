@@ -1,0 +1,36 @@
+# Core LLM & Agent Framework
+langchain
+langgraph
+langchain-community
+langchain-ollama
+
+# Database
+supabase
+
+# Environment variables
+python-dotenv
+
+# Multilingual Translation
+transformers
+torch
+sentencepiece
+sacremoses
+
+# Image & Video
+pillow
+moviepy
+
+# Google Trends
+pytrends
+
+# WhatsApp & HTTP
+requests
+httpx
+
+# Dashboard API
+fastapi
+uvicorn
+
+# Utilities
+pandas
+numpy 
