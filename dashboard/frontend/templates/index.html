@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VyaparAI Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>🌿 VyaparAI</h1>
+        <p>AI-Powered Marketing for Kerala Micro-Businesses</p>
+    </div>
+
+    <!-- Input Form -->
+    <div class="card" id="input-section">
+        <h2>Product Details</h2>
+        <form id="pipeline-form" enctype="multipart/form-data">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Business Name</label>
+                    <input type="text" name="business_name" placeholder="Jijo Orchid Nursery" required>
+                </div>
+                <div class="form-group">
+                    <label>Product Name</label>
+                    <input type="text" name="product_name" placeholder="Fancy Orchid" required>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Price (Rs.)</label>
+                    <input type="text" name="price" placeholder="1450" required>
+                </div>
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" name="location" placeholder="Kollam, Kerala" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Product Description</label>
+                <textarea name="description" rows="3" 
+                    placeholder="Rare imported orchid from Nagaland..." required></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Language</label>
+                    <select name="language">
+                        <option value="Malayalam">Malayalam</option>
+                        <option value="Tamil">Tamil</option>
+                        <option value="Hindi">Hindi</option>
+                        <option value="English">English</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Product Images</label>
+                    <input type="file" name="images" accept=".jpg,.jpeg,.png,.webp" multiple>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary" id="generate-btn">
+                🚀 Generate Marketing Content
+            </button>
+        </form>
+    </div>
+
+    <!-- Pipeline Progress -->
+    <div class="card" id="progress-section" style="display:none">
+        <h2>Pipeline Progress</h2>
+
+        <div class="steps">
+            <div class="step" id="step-0">📥 Input</div>
+            <div class="step" id="step-1">📈 Trends</div>
+            <div class="step" id="step-2">✍️ Script</div>
+            <div class="step" id="step-3">🌐 Translate</div>
+            <div class="step" id="step-4">🎙️ Voice</div>
+            <div class="step" id="step-5">🎬 Video</div>
+            <div class="step" id="step-6">🖼️ Thumbnail</div>
+            <div class="step" id="step-7">✅ Ready</div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+
+        <div class="log-box" id="log-box"></div>
+    </div>
+
+    <!-- Approval Section -->
+    <div class="card" id="approval-section" style="display:none">
+        <h2>👀 Review & Approve</h2>
+
+        <div class="preview-grid">
+
+            <!-- Video Preview -->
+            <div class="preview-item">
+                <h3>Video Preview</h3>
+                <video id="video-preview" controls width="100%">
+                    Your browser does not support video.
+                </video>
+            </div>
+
+            <!-- Thumbnail Preview -->
+            <div class="preview-item">
+                <h3>Thumbnail</h3>
+                <img id="thumbnail-preview" src="" alt="Thumbnail" width="100%">
+            </div>
+
+        </div>
+
+        <!-- Script Preview -->
+        <div class="script-preview" id="script-preview"></div>
+
+        <!-- Approve / Reject -->
+        <div class="approval-buttons">
+            <button class="btn-approve" onclick="approve()">
+                ✅ Approve & Publish
+            </button>
+            <div class="reject-section">
+                <textarea id="reject-feedback" placeholder="What needs to change?"></textarea>
+                <button class="btn-reject" onclick="reject()">
+                    ❌ Reject & Rewrite
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ── Form submit ──────────────────────────────────────────────
+document.getElementById('pipeline-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    document.getElementById('progress-section').style.display = 'block';
+    document.getElementById('approval-section').style.display = 'none';
+    document.getElementById('log-box').innerHTML = '';
+    document.getElementById('generate-btn').disabled = true;
+
+    // Reset steps
+    document.querySelectorAll('.step').forEach(s => {
+        s.className = 'step';
+    });
+
+    const formData = new FormData(e.target);
+    await fetch('/generate', { method: 'POST', body: formData });
+
+    // Subscribe to SSE
+    startStream();
+});
+
+// ── SSE Stream ───────────────────────────────────────────────
+function startStream() {
+    const es = new EventSource('/stream');
+
+    es.onmessage = (e) => {
+        const event = JSON.parse(e.data);
+
+        if (event.type === 'log') {
+            addLog(event.data);
+            if (event.data.progress) {
+                setProgress(event.data.progress);
+            }
+        }
+
+        if (event.type === 'step_update') {
+            updateStep(event.data.index, event.data.status);
+        }
+
+        if (event.type === 'pipeline_ready') {
+            showApproval(event.data);
+            es.close();
+        }
+    };
+
+    es.onerror = () => es.close();
+}
+
+// ── Log box ──────────────────────────────────────────────────
+function addLog(data) {
+    const box = document.getElementById('log-box');
+    const line = document.createElement('div');
+    line.className = `log-line log-${data.level}`;
+    line.textContent = `[${data.timestamp}] ${data.message}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+}
+
+// ── Progress bar ─────────────────────────────────────────────
+function setProgress(pct) {
+    document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+// ── Step indicators ──────────────────────────────────────────
+function updateStep(index, status) {
+    const step = document.getElementById(`step-${index}`);
+    if (step) step.className = `step step-${status}`;
+}
+
+// ── Show approval section ────────────────────────────────────
+function showApproval(data) {
+    document.getElementById('approval-section').style.display = 'block';
+    document.getElementById('generate-btn').disabled = false;
+
+    // Video
+    const video = document.getElementById('video-preview');
+    video.src = '/' + data.video_path;
+
+    // Thumbnail
+    document.getElementById('thumbnail-preview').src = '/' + data.thumbnail_path;
+
+    // Script
+   const s = script.script || script;
+document.getElementById('script-preview').innerHTML = `
+    <h3>📝 Generated Script</h3>
+    <p><strong>Title:</strong> ${s.title || 'N/A'}</p>
+    <p><strong>Hook:</strong> ${s.hook || 'N/A'}</p>
+    <p><strong>CTA:</strong> ${s.cta || 'N/A'}</p>
+    <p><strong>Tags:</strong> ${(s.tags || []).join(', ')}</p>
+`;
+}
+
+// ── Approve ──────────────────────────────────────────────────
+async function approve() {
+    const res = await fetch('/approve', { method: 'POST' });
+    const data = await res.json();
+    alert('✅ Approved! Publishing will start shortly.');
+}
+
+// ── Reject ───────────────────────────────────────────────────
+async function reject() {
+    const feedback = document.getElementById('reject-feedback').value;
+    const formData = new FormData();
+    formData.append('feedback', feedback);
+    await fetch('/reject', { method: 'POST', body: formData });
+    alert('❌ Rejected. Pipeline will rewrite the script.');
+    document.getElementById('approval-section').style.display = 'none';
+}
+</script>
+
+</body>
+</html>

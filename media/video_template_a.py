@@ -37,7 +37,10 @@ def load_and_resize(image_path: str) -> np.ndarray:
     
     # Now resize to exact target size
     img = img.resize((WIDTH, HEIGHT), Image.LANCZOS)
-    return np.array(img)
+    arr = np.array(img)
+    # Force exact shape — prevents 1px rounding errors
+    arr = arr[:HEIGHT, :WIDTH]
+    return arr
 
 def make_image_clip(image_path: str, duration: float) -> ImageClip:
     """
