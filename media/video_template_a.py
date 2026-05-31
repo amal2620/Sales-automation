@@ -113,9 +113,9 @@ def build_slideshow_video(
         # Caption for this image
         if i < len(captions) and captions[i]:
             caption = make_caption_clip(captions[i], per_image)
-            clip = CompositeVideoClip([img_clip, caption])
+            clip = CompositeVideoClip([img_clip, caption], size=(WIDTH, HEIGHT))
         else:
-            clip = img_clip
+            clip = CompositeVideoClip([img_clip], size=(WIDTH, HEIGHT))
 
         clips.append(clip)
 

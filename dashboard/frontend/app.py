@@ -76,8 +76,6 @@ async def stream():
     def generate():
         while True:
             item = _event_queue.get()
-            if item is _STOP:
-                break
             yield f"data: {json.dumps(item)}\n\n"
     return StreamingResponse(
         generate(),
@@ -212,7 +210,13 @@ def run_pipeline(business_name, product_name, price, description, location, lang
         # Step 4 — Voiceover
         push_step(4, 'active')
         push("⟳ Generating Malayalam voiceover...", 'info', step=5, progress=65)
-        voiceover_text = translated.get("body", script.get("body", f"Welcome to {business_name}"))
+
+        # unwrap nested script
+        actual_script = script.get("script", script)
+        voiceover_text = actual_script.get(
+            "body",
+            f"Welcome to {business_name}. {product_name} available for Rs.{price}"
+        )
         audio_path = f"outputs/audio/{product_name.replace(' ', '_')}_voiceover.mp3"
         generate_voiceover(voiceover_text, audio_path, language)
         push("✔ Voiceover generated", 'success', step=5, progress=70)
@@ -222,27 +226,27 @@ def run_pipeline(business_name, product_name, price, description, location, lang
         push_step(5, 'active')
         push("⟳ Assembling video...", 'info', step=6, progress=75)
 
-        # Use uploaded image or all images in folder
-        # Use uploaded images directly — already a list
-        if not image_paths:
-            # fallback — use existing images in folder
-            image_paths = [
+        # use actual script for captions
+        captions = [
+            actual_script.get("hook", product_name)[:100],
+            actual_script.get("body", "")[:80],
+            f"Only Rs.{price} — {business_name}"
+        ]
+
+        # use ALL valid images
+        valid_images = [
+            p for p in image_paths
+            if p.lower().endswith(('.jpg', '.jpeg', '.png'))
+        ]
+        if not valid_images:
+            valid_images = [
                 os.path.join(UPLOAD_DIR, f)
                 for f in os.listdir(UPLOAD_DIR)
                 if f.lower().endswith(('.jpg', '.jpeg', '.png'))
             ]
 
-        # filter out .webp — convert first or skip
-        image_paths = [p for p in image_paths if p.lower().endswith(('.jpg', '.jpeg', '.png'))]
-
-        captions = [
-            script.get("hook", product_name),
-            script.get("body", "")[:80],
-            f"Only Rs.{price} — {business_name}"
-        ]
-
         video_path = f"outputs/videos/{product_name.replace(' ', '_')}_video.mp4"
-        build_slideshow_video(image_paths[:3], audio_path, captions, video_path, business_name)
+        build_slideshow_video(valid_images, audio_path, captions, video_path, business_name)
         push("✔ Video assembled", 'success', step=6, progress=85)
         push_step(5, 'completed')
 
@@ -270,7 +274,9 @@ def run_pipeline(business_name, product_name, price, description, location, lang
         push(f"❌ Pipeline error: {str(e)}", 'error')
         _pipeline_state["status"] = "error"
 
-    _event_queue.put(_STOP)
+    # DON'T send _STOP — keep stream alive for reject reruns
+    # Only send completion signal
+    _event_queue.put({'type': 'pipeline_done', 'data': {}})
 
 
 if __name__ == "__main__":

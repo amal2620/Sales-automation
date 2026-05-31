@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VyaparAI Dashboard</title>
+    <title>Sales Automator Dashboard</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -12,8 +12,8 @@
 
     <!-- Header -->
     <div class="header">
-        <h1>🌿 VyaparAI</h1>
-        <p>AI-Powered Marketing for Kerala Micro-Businesses</p>
+        <h1>🌿 Sales Automator</h1>
+        <p>AI-Powered Sales Automation for Indian Micro-Businesses</p>
     </div>
 
     <!-- Input Form -->
@@ -138,36 +138,59 @@
 // ── Form submit ──────────────────────────────────────────────
 document.getElementById('pipeline-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-
+    resetUI();
     document.getElementById('progress-section').style.display = 'block';
-    document.getElementById('approval-section').style.display = 'none';
-    document.getElementById('log-box').innerHTML = '';
     document.getElementById('generate-btn').disabled = true;
 
-    // Reset steps
+    const formData = new FormData(e.target);
+    await fetch('/generate', { method: 'POST', body: formData });
+    startStream();
+});
+
+// ── Reset entire UI ──────────────────────────────────────────
+function resetUI() {
+    // hide approval section
+    document.getElementById('approval-section').style.display = 'none';
+
+    // clear video + thumbnail + script
+    document.getElementById('video-preview').src = '';
+    document.getElementById('thumbnail-preview').src = '';
+    document.getElementById('script-preview').innerHTML = '';
+
+    // clear feedback box
+    document.getElementById('reject-feedback').value = '';
+
+    // reset all steps
     document.querySelectorAll('.step').forEach(s => {
         s.className = 'step';
     });
 
-    const formData = new FormData(e.target);
-    await fetch('/generate', { method: 'POST', body: formData });
+    // clear log
+    document.getElementById('log-box').innerHTML = '';
 
-    // Subscribe to SSE
-    startStream();
-});
+    // reset progress
+    document.getElementById('progress-fill').style.width = '0%';
+}
 
 // ── SSE Stream ───────────────────────────────────────────────
+let activeStream = null;
+
 function startStream() {
+    // close existing stream if any
+    if (activeStream) {
+        activeStream.close();
+        activeStream = null;
+    }
+
     const es = new EventSource('/stream');
+    activeStream = es;
 
     es.onmessage = (e) => {
         const event = JSON.parse(e.data);
 
         if (event.type === 'log') {
             addLog(event.data);
-            if (event.data.progress) {
-                setProgress(event.data.progress);
-            }
+            if (event.data.progress) setProgress(event.data.progress);
         }
 
         if (event.type === 'step_update') {
@@ -176,11 +199,19 @@ function startStream() {
 
         if (event.type === 'pipeline_ready') {
             showApproval(event.data);
-            es.close();
+            document.getElementById('generate-btn').disabled = false;
+            // DON'T close stream — keep alive for reject rerun
+        }
+
+        if (event.type === 'pipeline_done') {
+            // pipeline finished — don't close, stay ready for next run
         }
     };
 
-    es.onerror = () => es.close();
+    es.onerror = () => {
+        // reconnect on error
+        setTimeout(startStream, 2000);
+    };
 }
 
 // ── Log box ──────────────────────────────────────────────────
@@ -207,41 +238,47 @@ function updateStep(index, status) {
 // ── Show approval section ────────────────────────────────────
 function showApproval(data) {
     document.getElementById('approval-section').style.display = 'block';
-    document.getElementById('generate-btn').disabled = false;
 
     // Video
     const video = document.getElementById('video-preview');
-    video.src = '/' + data.video_path;
+    video.src = '/' + data.video_path + '?t=' + Date.now(); // cache bust
+    video.load();
 
     // Thumbnail
-    document.getElementById('thumbnail-preview').src = '/' + data.thumbnail_path;
+    document.getElementById('thumbnail-preview').src =
+        '/' + data.thumbnail_path + '?t=' + Date.now();
 
-    // Script
-   const s = script.script || script;
-document.getElementById('script-preview').innerHTML = `
-    <h3>📝 Generated Script</h3>
-    <p><strong>Title:</strong> ${s.title || 'N/A'}</p>
-    <p><strong>Hook:</strong> ${s.hook || 'N/A'}</p>
-    <p><strong>CTA:</strong> ${s.cta || 'N/A'}</p>
-    <p><strong>Tags:</strong> ${(s.tags || []).join(', ')}</p>
-`;
+    // Script — unwrap nested
+    const s = (data.script && data.script.script) ? data.script.script : data.script || {};
+    document.getElementById('script-preview').innerHTML = `
+        <h3>📝 Generated Script</h3>
+        <p><strong>Title:</strong> ${s.title || 'N/A'}</p>
+        <p><strong>Hook:</strong> ${s.hook || 'N/A'}</p>
+        <p><strong>CTA:</strong> ${s.cta || 'N/A'}</p>
+        <p><strong>Tags:</strong> ${(s.tags || []).join(', ')}</p>
+    `;
 }
 
 // ── Approve ──────────────────────────────────────────────────
 async function approve() {
-    const res = await fetch('/approve', { method: 'POST' });
-    const data = await res.json();
+    await fetch('/approve', { method: 'POST' });
     alert('✅ Approved! Publishing will start shortly.');
 }
 
 // ── Reject ───────────────────────────────────────────────────
 async function reject() {
     const feedback = document.getElementById('reject-feedback').value;
-    const formData = new FormData();
-    formData.append('feedback', feedback);
-    await fetch('/reject', { method: 'POST', body: formData });
-    alert('❌ Rejected. Pipeline will rewrite the script.');
-    document.getElementById('approval-section').style.display = 'none';
+
+    // Reset UI for rerun
+    resetUI();
+    document.getElementById('progress-section').style.display = 'block';
+
+    // Send reject to backend
+    const form = new FormData();
+    form.append('feedback', feedback);
+    await fetch('/reject', { method: 'POST', body: form });
+
+    // Stream already alive — new events will flow in automatically
 }
 </script>
 
